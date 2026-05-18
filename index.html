@@ -235,7 +235,12 @@
   }
 
   /* ── TABLE ── */
-  .tbl-wrap { overflow-x: auto; }
+  .tbl-wrap {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 380px);
+    min-height: 300px;
+  }
   table { width: 100%; border-collapse: collapse; }
   thead tr { background: var(--sky); }
   th {
@@ -243,6 +248,9 @@
     text-transform: uppercase; letter-spacing: .5px; color: var(--blue-dk);
     white-space: nowrap; cursor: pointer; user-select: none;
     border-bottom: 2px solid var(--sky-mid);
+    position: sticky; top: 0; z-index: 10;
+    background: var(--sky);
+    box-shadow: 0 2px 0 var(--sky-mid);
   }
   th:hover { background: var(--sky-mid); }
   th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
@@ -714,8 +722,11 @@ function fetchExcel(silent = false) {
   nowBtn.classList.add('spinning');
   if (!silent) showLoading('Actualizando datos…');
 
-  // cache-busting timestamp so browser always fetches the latest file
-  fetch('Estatus_de_BO.xlsx?t=' + Date.now())
+  // Forzar descarga fresca ignorando caché del CDN de GitHub Pages
+  fetch('Estatus_de_BO.xlsx?t=' + Date.now(), {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+  })
     .then(r => { if (!r.ok) throw new Error('No encontrado'); return r.arrayBuffer(); })
     .then(buf => {
       processWorkbook(buf);
@@ -794,7 +805,10 @@ function setStatus(msg, ok = true) {
 // ─── AUTO-LOAD ON PAGE OPEN ───────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   showLoading('Cargando datos del Excel…');
-  fetch('Estatus_de_BO.xlsx?t=' + Date.now())
+  fetch('Estatus_de_BO.xlsx?t=' + Date.now(), {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+  })
     .then(r => { if (!r.ok) throw new Error('No encontrado'); return r.arrayBuffer(); })
     .then(buf => { processWorkbook(buf); hideLoading(); })
     .catch(() => {
