@@ -447,8 +447,8 @@
 </head>
 <body>
 
-<!-- Loading overlay -->
-<div id="loading" class="loading-overlay">
+<!-- Loading overlay (oculto por defecto) -->
+<div id="loading" class="loading-overlay" style="display:none">
   <div class="spinner"></div>
   <p id="loading-msg">Cargando archivo Excel…</p>
 </div>
@@ -921,7 +921,8 @@ window.addEventListener('DOMContentLoaded', () => {
     .then(r => { if (!r.ok) throw new Error('no json'); return r.json(); })
     .then(json => {
       processJson(json);
-      hideSplash();     // skip splash if data.json is already there
+      hideSplash();
+      hideLoading();    // ← asegura que el overlay nunca quede trabado
     })
     .catch(() => {
       // No hay data.json → mostrar splash para que el usuario elija
