@@ -3,9 +3,9 @@ name: 🔄 Actualizar datos del dashboard
 on:
   push:
     paths:
-      - 'Estatus_de_BO.xlsx'          # Excel en la raíz del repo ✅
-      - 'data/Estatus_de_BO.xlsx'     # Excel dentro de data/ (opcional)
-  workflow_dispatch:                   # lanzar manualmente desde GitHub
+      - '*.xlsx'           # cualquier Excel en la raíz
+      - 'data/*.xlsx'      # o en la carpeta data/
+  workflow_dispatch:       # lanzar manualmente desde GitHub
 
 jobs:
   convert:
