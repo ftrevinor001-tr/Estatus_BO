@@ -836,10 +836,6 @@ function refreshNow() {
 
 // ── Toggle auto ────────────────────────────────────────────────────────────
 function toggleAuto() {
-  if (!githubRawUrl && autoActive === false) {
-    alert('Para usar el auto-actualizar, primero configura la URL de GitHub en el panel superior.');
-    return;
-  }
   autoActive = !autoActive;
   document.getElementById('toggle-track').classList.toggle('on', autoActive);
   document.getElementById('auto-label').textContent = autoActive ? 'Auto ON' : 'Auto';
@@ -880,16 +876,44 @@ function setStatus(msg) {
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────
+function autoDetectGithubUrl() {
+  // Si estamos en *.github.io/REPO/, construimos la URL raw automáticamente
+  const host = window.location.hostname;
+  const path = window.location.pathname;
+  if (host.endsWith('.github.io')) {
+    const username = host.replace('.github.io', '');
+    const repo     = path.split('/').filter(Boolean)[0];
+    if (username && repo) {
+      return `https://raw.githubusercontent.com/${username}/${repo}/main/Estatus_de_BO.xlsx`;
+    }
+  }
+  return null;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
-  // Recuperar URL guardada
+  // 1. Intentar auto-detectar desde la URL de GitHub Pages
+  const detected = autoDetectGithubUrl();
+
+  // 2. Luego intentar lo guardado en localStorage
   const saved = localStorage.getItem('bo_github_url');
-  if (saved) {
+
+  if (detected && !saved) {
+    // Auto-configurar sin que el usuario haga nada
+    githubRawUrl = detected;
+    localStorage.setItem('bo_github_url', detected);
+    document.getElementById('cfg-url').value = detected;
+    showConfigOk(detected);
+    // Actualizar label para indicar que fue automático
+    const banner = document.getElementById('config-banner');
+    banner.querySelector('.cfg-sub').textContent =
+      '✅ URL detectada automáticamente desde tu repositorio de GitHub Pages';
+  } else if (saved) {
     githubRawUrl = saved;
     document.getElementById('cfg-url').value = saved;
     showConfigOk(saved);
   }
 
-  // Carga inicial
+  // 3. Carga inicial
   showLoading('Cargando datos del Excel…');
   fetch(getSourceUrl(), { cache: 'no-store' })
     .then(r => { if (!r.ok) throw new Error('Archivo no encontrado'); return r.arrayBuffer(); })
