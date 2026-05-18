@@ -12,8 +12,22 @@ import json
 import os
 from datetime import datetime
 
-EXCEL_PATH = os.path.join("data", "Estatus_de_BO.xlsx")
-JSON_PATH  = os.path.join("data", "data.json")
+POSIBLES_RUTAS = [
+    "Estatus_de_BO.xlsx",           # raíz del repo (más común)
+    os.path.join("data", "Estatus_de_BO.xlsx"),  # carpeta data/
+]
+JSON_PATH = os.path.join("data", "data.json")
+
+
+def encontrar_excel():
+    for ruta in POSIBLES_RUTAS:
+        if os.path.exists(ruta):
+            print(f"✅ Excel encontrado en: {ruta}")
+            return ruta
+    raise FileNotFoundError(
+        f"No se encontró el Excel. Rutas buscadas: {POSIBLES_RUTAS}\n"
+        f"Sube Estatus_de_BO.xlsx a la raíz del repositorio."
+    )
 
 
 def safe_str(val):
@@ -43,6 +57,7 @@ def safe_num(val):
 
 
 def main():
+    EXCEL_PATH = encontrar_excel()
     print(f"📂 Leyendo: {EXCEL_PATH}")
     xl = pd.ExcelFile(EXCEL_PATH)
     print(f"   Hojas encontradas: {xl.sheet_names}")
