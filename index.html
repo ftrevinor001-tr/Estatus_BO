@@ -516,15 +516,15 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
     <div>
       <div class="cfg-label">Conexión con GitHub</div>
-      <div class="cfg-sub">Pega la URL raw de tu archivo Excel para que el auto-actualizar funcione correctamente</div>
+      <div class="cfg-sub">Pega la URL de tu repositorio para activar la auto-actualización vía API</div>
     </div>
     <div class="cfg-input-wrap">
-      <input type="url" id="cfg-url" placeholder="https://raw.githubusercontent.com/usuario/repo/main/Estatus_de_BO.xlsx">
+      <input type="url" id="cfg-url" placeholder="https://github.com/usuario/nombre-repo">
       <button class="cfg-save-btn" onclick="saveGithubUrl()">Guardar</button>
     </div>
     <div id="cfg-ok" style="display:none" class="cfg-status-ok">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-      Conectado
+      <span>Conectado</span>
       <button class="cfg-clear-btn" onclick="clearGithubUrl()" style="margin-left:6px">Cambiar</button>
     </div>
   </div>
@@ -762,77 +762,83 @@ let intervalSec    = 300;
 let countdownLeft  = 0;
 let countdownTimer = null;
 let isRefreshing   = false;
-let githubRawUrl   = '';
+let lastFileSha    = '';          // detecta si el archivo cambió realmente
+let ghUser         = '';
+let ghRepo         = '';
+let ghFile         = 'Estatus_de_BO.xlsx';
 
-// ── GitHub URL config ──────────────────────────────────────────────────────
-function saveGithubUrl() {
-  const val = document.getElementById('cfg-url').value.trim();
-  if (!val || !val.startsWith('http')) { alert('Ingresa una URL válida.'); return; }
-  githubRawUrl = val;
-  localStorage.setItem('bo_github_url', val);
-  showConfigOk(val);
-  fetchExcel(false);   // cargar inmediatamente
+// ── Detectar usuario/repo desde la URL de GitHub Pages ────────────────────
+function detectGithubRepo() {
+  const host = window.location.hostname;   // ftrevinor001-tr.github.io
+  const path = window.location.pathname;   // /Estatus_BO/
+  if (host.endsWith('.github.io')) {
+    ghUser = host.replace('.github.io', '');
+    ghRepo = path.split('/').filter(Boolean)[0] || '';
+  }
 }
 
-function clearGithubUrl() {
-  githubRawUrl = '';
-  localStorage.removeItem('bo_github_url');
-  document.getElementById('cfg-url').value = '';
-  document.getElementById('cfg-ok').style.display  = 'none';
-  document.getElementById('cfg-url').closest('.cfg-input-wrap').style.display = 'flex';
-  document.getElementById('config-banner').classList.remove('configured');
+// ── GitHub API fetch (sin caché, siempre actual) ───────────────────────────
+function fetchViaGithubApi(silent) {
+  const apiUrl = `https://api.github.com/repos/${ghUser}/${ghRepo}/contents/${ghFile}`;
+  return fetch(apiUrl, {
+    headers: { 'Accept': 'application/vnd.github.v3+json' }
+  })
+  .then(r => {
+    if (r.status === 403) throw new Error('Límite de la API de GitHub alcanzado. Espera 1 minuto.');
+    if (!r.ok)            throw new Error(`GitHub API error ${r.status}`);
+    return r.json();
+  })
+  .then(data => {
+    if (data.sha === lastFileSha) {
+      // Archivo sin cambios — no reprocesar
+      setStatus('Sin cambios · ' + hora());
+      return null;
+    }
+    lastFileSha = data.sha;
+    // Decodificar base64 → ArrayBuffer
+    const b64    = data.content.replace(/\n/g, '');
+    const binary = atob(b64);
+    const buf    = new ArrayBuffer(binary.length);
+    const view   = new Uint8Array(buf);
+    for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+    return buf;
+  });
 }
 
-function showConfigOk(url) {
-  const short = url.split('/').slice(-1)[0];
-  document.getElementById('cfg-ok').style.display  = 'flex';
-  document.getElementById('cfg-url').closest('.cfg-input-wrap').style.display = 'none';
-  document.getElementById('config-banner').classList.add('configured');
-  document.getElementById('cfg-url').value = url;
+// ── Fetch local (fallback cuando no estamos en GitHub Pages) ──────────────
+function fetchLocal() {
+  return fetch('Estatus_de_BO.xlsx?t=' + Date.now(), { cache: 'no-store' })
+    .then(r => { if (!r.ok) throw new Error('Archivo no encontrado'); return r.arrayBuffer(); });
 }
 
-function getSourceUrl() {
-  // Siempre usar raw.githubusercontent.com cuando esté configurado — evita el CDN de GitHub Pages
-  if (githubRawUrl) return githubRawUrl + '?t=' + Date.now();
-  // Fallback: misma carpeta (funciona abriendo el HTML localmente o en servidor propio)
-  return 'Estatus_de_BO.xlsx?t=' + Date.now();
-}
-
-// ── Fetch ──────────────────────────────────────────────────────────────────
+// ── Orquestador principal ──────────────────────────────────────────────────
 function fetchExcel(silent = false) {
   if (isRefreshing) return;
   isRefreshing = true;
-  const nowBtn = document.getElementById('now-btn');
-  nowBtn.classList.add('spinning');
+  document.getElementById('now-btn').classList.add('spinning');
   if (!silent) showLoading('Actualizando datos…');
 
-  const url = getSourceUrl();
+  const useApi = ghUser && ghRepo;
+  const promise = useApi ? fetchViaGithubApi(silent) : fetchLocal();
 
-  fetch(url, { cache: 'no-store' })
-    .then(r => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.arrayBuffer();
-    })
+  promise
     .then(buf => {
-      processWorkbook(buf);
+      if (buf) processWorkbook(buf);   // null = sin cambios, no reprocesar
       if (!silent) hideLoading();
     })
     .catch(err => {
       if (!silent) hideLoading();
-      setStatus('⚠ Error: ' + err.message);
-      console.error('fetchExcel error:', err);
+      setStatus('⚠ ' + err.message);
+      console.error('fetchExcel:', err);
     })
     .finally(() => {
       isRefreshing = false;
-      nowBtn.classList.remove('spinning');
+      document.getElementById('now-btn').classList.remove('spinning');
       if (autoActive) startCountdown();
     });
 }
 
-function refreshNow() {
-  stopCountdown();
-  fetchExcel(false);
-}
+function refreshNow() { stopCountdown(); lastFileSha = ''; fetchExcel(false); }
 
 // ── Toggle auto ────────────────────────────────────────────────────────────
 function toggleAuto() {
@@ -840,7 +846,7 @@ function toggleAuto() {
   document.getElementById('toggle-track').classList.toggle('on', autoActive);
   document.getElementById('auto-label').textContent = autoActive ? 'Auto ON' : 'Auto';
   document.getElementById('status-dot').classList.toggle('live', autoActive);
-  if (autoActive) { startCountdown(); }
+  if (autoActive) startCountdown();
   else { stopCountdown(); document.getElementById('countdown-wrap').style.display = 'none'; }
 }
 
@@ -871,57 +877,62 @@ function updateCountdownDisplay() {
     m > 0 ? `${m}m ${String(s).padStart(2,'0')}s` : `${s}s`;
 }
 
-function setStatus(msg) {
-  document.getElementById('last-update').textContent = msg;
+function setStatus(msg) { document.getElementById('last-update').textContent = msg; }
+function hora() { return new Date().toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+
+// ── Config banner helpers ──────────────────────────────────────────────────
+function saveGithubUrl() {
+  const val = document.getElementById('cfg-url').value.trim();
+  if (!val || !val.startsWith('http')) { return; }
+  // Parsear usuario/repo de la URL pegada (raw o normal)
+  const m = val.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (m) { ghUser = m[1]; ghRepo = m[2].replace(/\.git$/, ''); }
+  localStorage.setItem('bo_gh_user', ghUser);
+  localStorage.setItem('bo_gh_repo', ghRepo);
+  showConfigOk();
+  lastFileSha = '';
+  fetchExcel(false);
+}
+
+function clearGithubUrl() {
+  ghUser = ghRepo = '';
+  localStorage.removeItem('bo_gh_user');
+  localStorage.removeItem('bo_gh_repo');
+  document.getElementById('cfg-url').value = '';
+  document.getElementById('cfg-ok').style.display = 'none';
+  document.getElementById('cfg-url').closest('.cfg-input-wrap').style.display = 'flex';
+  document.getElementById('config-banner').classList.remove('configured');
+}
+
+function showConfigOk() {
+  document.getElementById('cfg-ok').style.display = 'flex';
+  document.getElementById('cfg-url').closest('.cfg-input-wrap').style.display = 'none';
+  document.getElementById('config-banner').classList.add('configured');
+  // Mostrar repo detectado
+  const label = document.getElementById('cfg-ok');
+  label.querySelector('span') && (label.querySelector('span').textContent = `${ghUser}/${ghRepo}`);
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────
-function autoDetectGithubUrl() {
-  // Si estamos en *.github.io/REPO/, construimos la URL raw automáticamente
-  const host = window.location.hostname;
-  const path = window.location.pathname;
-  if (host.endsWith('.github.io')) {
-    const username = host.replace('.github.io', '');
-    const repo     = path.split('/').filter(Boolean)[0];
-    if (username && repo) {
-      return `https://raw.githubusercontent.com/${username}/${repo}/main/Estatus_de_BO.xlsx`;
-    }
-  }
-  return null;
-}
-
 window.addEventListener('DOMContentLoaded', () => {
-  // 1. Intentar auto-detectar desde la URL de GitHub Pages
-  const detected = autoDetectGithubUrl();
+  // 1. Auto-detectar repo desde la URL de GitHub Pages
+  detectGithubRepo();
 
-  // 2. Luego intentar lo guardado en localStorage
-  const saved = localStorage.getItem('bo_github_url');
+  // 2. Restaurar si había algo guardado (override auto-detect)
+  const su = localStorage.getItem('bo_gh_user');
+  const sr = localStorage.getItem('bo_gh_repo');
+  if (su && sr) { ghUser = su; ghRepo = sr; }
 
-  if (detected && !saved) {
-    // Auto-configurar sin que el usuario haga nada
-    githubRawUrl = detected;
-    localStorage.setItem('bo_github_url', detected);
-    document.getElementById('cfg-url').value = detected;
-    showConfigOk(detected);
-    // Actualizar label para indicar que fue automático
-    const banner = document.getElementById('config-banner');
-    banner.querySelector('.cfg-sub').textContent =
-      '✅ URL detectada automáticamente desde tu repositorio de GitHub Pages';
-  } else if (saved) {
-    githubRawUrl = saved;
-    document.getElementById('cfg-url').value = saved;
-    showConfigOk(saved);
+  // 3. Mostrar banner configurado si tenemos datos
+  if (ghUser && ghRepo) {
+    showConfigOk();
+    document.getElementById('config-banner').querySelector('.cfg-sub').textContent =
+      `✅ Repo detectado: ${ghUser}/${ghRepo}  ·  Usando GitHub API (siempre actualizado)`;
   }
 
-  // 3. Carga inicial
+  // 4. Carga inicial
   showLoading('Cargando datos del Excel…');
-  fetch(getSourceUrl(), { cache: 'no-store' })
-    .then(r => { if (!r.ok) throw new Error('Archivo no encontrado'); return r.arrayBuffer(); })
-    .then(buf => { processWorkbook(buf); hideLoading(); })
-    .catch(() => {
-      hideLoading();
-      setStatus('Configura GitHub o sube el Excel →');
-    });
+  fetchExcel(false);
 });
 
 // ─── DROPDOWNS ────────────────────────────────────────────────────────────
