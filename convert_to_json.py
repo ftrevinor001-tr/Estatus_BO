@@ -12,21 +12,45 @@ import json
 import os
 from datetime import datetime
 
-POSIBLES_RUTAS = [
-    "Estatus_de_BO.xlsx",           # raíz del repo (más común)
-    os.path.join("data", "Estatus_de_BO.xlsx"),  # carpeta data/
-]
 JSON_PATH = os.path.join("data", "data.json")
 
 
 def encontrar_excel():
-    for ruta in POSIBLES_RUTAS:
-        if os.path.exists(ruta):
-            print(f"✅ Excel encontrado en: {ruta}")
-            return ruta
+    print("\n📁 Archivos en el directorio actual:")
+    for f in sorted(os.listdir(".")):
+        print(f"   {f}")
+
+    carpeta_data = "data"
+    if os.path.isdir(carpeta_data):
+        print(f"\n📁 Archivos en {carpeta_data}/:")
+        for f in sorted(os.listdir(carpeta_data)):
+            print(f"   {f}")
+
+    # 1. Buscar por nombre exacto en raíz y data/
+    nombres_exactos = ["Estatus_de_BO.xlsx", "Estatus_BO.xlsx",
+                       "estatus_de_bo.xlsx", "estatus_bo.xlsx"]
+    carpetas = [".", carpeta_data]
+    for carpeta in carpetas:
+        for nombre in nombres_exactos:
+            ruta = os.path.join(carpeta, nombre) if carpeta != "." else nombre
+            if os.path.exists(ruta):
+                print(f"\n✅ Excel encontrado: {ruta}")
+                return ruta
+
+    # 2. Buscar cualquier .xlsx en raíz y data/
+    for carpeta in carpetas:
+        if not os.path.isdir(carpeta) and carpeta != ".":
+            continue
+        base = "." if carpeta == "." else carpeta
+        for f in os.listdir(base):
+            if f.lower().endswith(".xlsx"):
+                ruta = os.path.join(base, f) if base != "." else f
+                print(f"\n✅ Excel encontrado (búsqueda amplia): {ruta}")
+                return ruta
+
     raise FileNotFoundError(
-        f"No se encontró el Excel. Rutas buscadas: {POSIBLES_RUTAS}\n"
-        f"Sube Estatus_de_BO.xlsx a la raíz del repositorio."
+        "No se encontró ningún archivo .xlsx en el repositorio.\n"
+        "Asegúrate de haber subido el Excel al repo."
     )
 
 
