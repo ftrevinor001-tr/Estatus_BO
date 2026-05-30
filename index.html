@@ -306,7 +306,7 @@ tr.detail-row td{padding:0;background:#F0F7FF;border-bottom:2px solid var(--sky-
       <table>
         <thead><tr>
           <th style="width:36px"></th>
-          <th onclick="sortBy('Folio')">Folio OC</th>
+          <th onclick="sortBy('_folio')" class="sort-desc">Folio OC</th>
           <th onclick="sortBy('Fecha')">Fecha OC</th>
           <th onclick="sortBy('Proveedor')">Proveedor</th>
           <th onclick="sortBy('Comprador Capturo')">Comprador</th>
@@ -342,7 +342,7 @@ tr.detail-row td{padding:0;background:#F0F7FF;border-bottom:2px solid var(--sky-
 <script>
 // ── STATE ──────────────────────────────────────────────────────────────────
 let allOrders = [], allProducts = {}, filtered = [];
-let sortCol = 'Fecha', sortDir = 'desc', currentPage = 1, pageSize = 50;
+let currentPage = 1, pageSize = 50;
 let autoActive = false, intervalSec = 300, countdownLeft = 0, countdownTimer = null, isRefreshing = false;
 
 // ── UI HELPERS ─────────────────────────────────────────────────────────────
@@ -613,25 +613,44 @@ function updateKPIs(){
 }
 
 // ── SORT ───────────────────────────────────────────────────────────────────
+let sortCol = '_folio', sortDir = 'desc';   // default: folio más alto primero
+
 function sortBy(col){
-  if(sortCol===col) sortDir=sortDir==='asc'?'desc':'asc'; else{sortCol=col;sortDir='asc';}
+  if(sortCol===col) sortDir=sortDir==='asc'?'desc':'asc'; else{sortCol=col;sortDir='desc';}
   sortFiltered(); renderTable();
   document.querySelectorAll('th').forEach(th=>{
     th.classList.remove('sort-asc','sort-desc');
     if(th.getAttribute('onclick')===`sortBy('${col}')`) th.classList.add(sortDir==='asc'?'sort-asc':'sort-desc');
   });
 }
+
 function sortFiltered(){
+  // Mapa: columna del header → campo interno a usar para comparar
+  const dateMap   = { 'Fecha':'_fechaOC', 'Fecha Entrega':'_fechaEnt' };
+  const innerMap  = { 'Proveedor':'_prov', 'Comprador Capturo':'_comp',
+                      'Estatus':'_estatus', 'Back Order':'_bo',
+                      '_estadoOC':'_estadoOC', 'Folio':'_folio', '_folio':'_folio' };
+
   filtered.sort((a,b)=>{
-    let va=a[sortCol]??'', vb=b[sortCol]??'';
-    // Use underscore fields for sortable cols
-    if(sortCol==='_estatus'||sortCol==='_bo'||sortCol==='_estadoOC'||sortCol==='_prov'||sortCol==='_comp'||sortCol==='_folio'){
-      va=a[sortCol]||''; vb=b[sortCol]||'';
+    let va, vb;
+
+    if(dateMap[sortCol]){
+      // Ordenar por objeto Date ya parseado
+      va = a[dateMap[sortCol]] || new Date(0);
+      vb = b[dateMap[sortCol]] || new Date(0);
+      return sortDir==='asc' ? va-vb : vb-va;
     }
-    if(va instanceof Date&&vb instanceof Date) return sortDir==='asc'?va-vb:vb-va;
-    if(!isNaN(parseFloat(va))&&!isNaN(parseFloat(vb))) return sortDir==='asc'?parseFloat(va)-parseFloat(vb):parseFloat(vb)-parseFloat(va);
+
+    const field = innerMap[sortCol] || sortCol;
+    va = a[field] ?? ''; vb = b[field] ?? '';
+
+    // Numérico
+    if(!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb)))
+      return sortDir==='asc' ? parseFloat(va)-parseFloat(vb) : parseFloat(vb)-parseFloat(va);
+
+    // Texto
     va=String(va).toLowerCase(); vb=String(vb).toLowerCase();
-    return sortDir==='asc'?va.localeCompare(vb):vb.localeCompare(va);
+    return sortDir==='asc' ? va.localeCompare(vb,'es') : vb.localeCompare(va,'es');
   });
 }
 
