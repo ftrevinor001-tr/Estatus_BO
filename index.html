@@ -87,22 +87,58 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-50);color:var(--gray
 
 /* ── FILTERS ── */
 .filter-card{background:var(--white);border-radius:var(--radius);padding:18px 22px;box-shadow:var(--shadow-sm);margin-bottom:18px}
-.filter-title{font-size:12px;font-weight:700;color:var(--gray-700);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.filter-title svg{width:14px;height:14px;color:var(--blue)}
-.filter-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.filter-title{font-size:12px;font-weight:700;color:var(--gray-700);text-transform:uppercase;
+  letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;user-select:none;margin-bottom:0}
+.filter-title:hover{color:var(--blue-dk)}
+.filter-title-left{display:flex;align-items:center;gap:8px}
+.filter-title-left svg{width:14px;height:14px;flex-shrink:0}
+.filter-chevron{width:15px;height:15px;transition:transform .25s;flex-shrink:0}
+.filter-chevron.closed{transform:rotate(-180deg)}
+.filter-badge-count{background:var(--blue);color:#fff;font-size:10px;font-weight:700;
+  padding:1px 8px;border-radius:10px;margin-left:4px;display:none}
+
+/* Grid de 6 columnas fijas — sin anidamiento */
+.filter-grid{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:10px;
+  margin-top:14px;
+  overflow:hidden;
+  max-height:500px;
+  opacity:1;
+  transition:max-height .3s ease,opacity .25s,margin-top .25s;
+}
+.filter-grid.hidden{max-height:0!important;opacity:0;pointer-events:none;margin-top:0}
 .filter-group{display:flex;flex-direction:column;gap:4px}
-.filter-group label{font-size:10px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px}
-.filter-group select,.filter-group input{padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--gray-700);background:var(--gray-50);outline:none;transition:border-color .15s,box-shadow .15s}
-.filter-group select:focus,.filter-group input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.12);background:var(--white)}
-#f-clave:not(:placeholder-shown){background:#FFFBEB;border-color:var(--amber-dk);box-shadow:0 0 0 3px rgba(245,158,11,.15)}
+.filter-group.span2{grid-column:span 2}   /* para pares de fecha */
+.filter-group.span3{grid-column:span 3}
+.filter-group label{font-size:10px;font-weight:700;color:var(--gray-500);
+  text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.filter-group select,.filter-group input{
+  padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);
+  font-family:inherit;font-size:13px;color:var(--gray-700);background:var(--gray-50);
+  outline:none;transition:border-color .15s,box-shadow .15s;width:100%}
+.filter-group select:focus,.filter-group input:focus{
+  border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.12);background:var(--white)}
+/* Date pair: two inputs side by side inside a span-2 cell */
+.date-pair{display:flex;gap:6px}
+.date-pair .date-half{flex:1;display:flex;flex-direction:column;gap:4px}
+.date-pair .date-half label{font-size:10px;font-weight:700;color:var(--gray-500);
+  text-transform:uppercase;letter-spacing:.4px}
+.date-pair .date-half input{padding:7px 8px;border:1.5px solid var(--gray-200);
+  border-radius:var(--radius-sm);font-family:inherit;font-size:12px;color:var(--gray-700);
+  background:var(--gray-50);outline:none;width:100%}
+.date-pair .date-half input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.12);background:var(--white)}
+#f-clave:not(:placeholder-shown){background:#FFFBEB;border-color:var(--amber-dk)}
 .filter-actions{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
-.btn{padding:7px 16px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;border:none;transition:.15s;display:inline-flex;align-items:center;gap:6px}
-.btn-primary{background:var(--blue);color:#fff}
-.btn-primary:hover{background:var(--blue-dk)}
+.btn{padding:7px 16px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;
+  font-size:13px;font-weight:600;border:none;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:var(--blue-dk)}
 .btn-ghost{background:var(--gray-100);color:var(--gray-500);border:1.5px solid var(--gray-200)}
 .btn-ghost:hover{background:var(--gray-200)}
-.btn-green{background:var(--mint-dk);color:#fff}
-.btn-green:hover{background:#059669}
+.btn-green{background:var(--mint-dk);color:#fff}.btn-green:hover{background:#059669}
+
 
 /* ── TABLE CARD ── */
 .table-card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
@@ -122,19 +158,24 @@ th.sort-desc::after{content:' ▼';font-size:9px}
 tbody tr.order-row{border-bottom:1px solid var(--gray-100);transition:background .1s;cursor:pointer}
 tbody tr.order-row:hover{background:var(--sky)}
 tbody tr.order-row.expanded{background:var(--sky)}
-td{padding:10px 14px;font-size:13px;vertical-align:middle}
-.expand-btn{width:24px;height:24px;border-radius:6px;background:var(--sky-mid);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
+td{padding:13px 14px;font-size:13.5px;vertical-align:middle}
+.expand-btn{width:26px;height:26px;border-radius:6px;background:var(--sky-mid);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
 .expand-btn:hover{background:var(--blue)}.expand-btn:hover svg{stroke:#fff}
-.expand-btn svg{width:13px;height:13px;stroke:var(--blue-dk);transition:transform .2s}
+.expand-btn svg{width:14px;height:14px;stroke:var(--blue-dk);transition:transform .2s}
 .expand-btn.open svg{transform:rotate(90deg)}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
-.badge::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0}
-.badge.aplicado{background:var(--mint);color:#065F46}.badge.aplicado::before{background:var(--mint-dk)}
-.badge.pendiente{background:var(--amber);color:#92400E}.badge.pendiente::before{background:var(--amber-dk)}
-.badge.cancelado{background:var(--red-lt);color:#991B1B}.badge.cancelado::before{background:var(--red)}
-.badge.otro{background:var(--gray-100);color:var(--gray-700)}.badge.otro::before{background:var(--gray-500)}
-.badge.por-recibir{background:#FEF3C7;color:#92400E}.badge.por-recibir::before{background:#F59E0B}
-.badge.recibido{background:#D1FAE5;color:#065F46}.badge.recibido::before{background:#10B981}
+/* Bigger folio + proveedor */
+.folio-cell{font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--blue-dk);background:var(--sky);padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.3px;border:1px solid var(--sky-mid)}
+.prov-cell{font-weight:700;color:var(--gray-900);font-size:14px}
+/* Badges with borders for better visibility */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;border:1.5px solid transparent}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.badge.aplicado{background:#D1FAE5;color:#065F46;border-color:#6EE7B7}.badge.aplicado::before{background:#10B981}
+.badge.pendiente{background:#FEF3C7;color:#92400E;border-color:#FCD34D}.badge.pendiente::before{background:#F59E0B}
+.badge.cancelado{background:#FEE2E2;color:#991B1B;border-color:#FCA5A5}.badge.cancelado::before{background:#EF4444}
+.badge.otro{background:var(--gray-100);color:var(--gray-700);border-color:var(--gray-200)}.badge.otro::before{background:var(--gray-500)}
+/* Estado Recepción - visually distinct */
+.badge.por-recibir{background:#FFF3CD;color:#664D03;border-color:#FFDA6A;font-size:12px}.badge.por-recibir::before{background:#FFC107}
+.badge.recibido{background:#D1E7DD;color:#0A3622;border-color:#A3CFBB;font-size:12px}.badge.recibido::before{background:#198754}
 .mono{font-family:'DM Mono',monospace;font-size:12px}
 tr.detail-row{display:none}
 tr.detail-row.visible{display:table-row}
@@ -143,6 +184,7 @@ tr.detail-row td{padding:0;background:#F0F7FF;border-bottom:2px solid var(--sky-
 .detail-inner h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--blue-dk);margin-bottom:10px;display:flex;align-items:center;gap:5px}
 .order-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .meta-chip{background:var(--white);border:1px solid var(--gray-200);border-radius:8px;padding:5px 10px;font-size:12px;display:flex;flex-direction:column;gap:1px;min-width:110px}
+
 .meta-chip .meta-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gray-500)}
 .meta-chip .meta-val{font-weight:600;color:var(--gray-900);font-size:12px}
 .meta-chip .meta-val.money{color:var(--blue-dk);font-family:'DM Mono',monospace}
@@ -248,48 +290,95 @@ tr.detail-row td{padding:0;background:#F0F7FF;border-bottom:2px solid var(--sky-
 
   <!-- FILTERS -->
   <div class="filter-card">
-    <div class="filter-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-      Filtros en Cascada
+    <div class="filter-title" onclick="toggleFilters()">
+      <div class="filter-title-left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        Filtros en Cascada
+        <span class="filter-badge-count" id="active-filters-count"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--blue);font-weight:600">
+        <span id="filter-toggle-label">Ocultar</span>
+        <svg class="filter-chevron" id="filter-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+      </div>
     </div>
-    <div class="filter-grid">
-      <div class="filter-group"><label>Estatus</label>
+
+    <div class="filter-grid" id="filter-grid">
+
+      <!-- Fila 1: 6 selectores -->
+      <div class="filter-group">
+        <label>Estatus</label>
         <select id="f-estatus" onchange="applyFilters()">
           <option value="">Todos</option><option>PENDIENTE</option><option>APLICADO</option><option>CANCELADO</option>
         </select>
       </div>
-      <div class="filter-group"><label>Estado de Recepción</label>
+      <div class="filter-group">
+        <label>Estado de Recepción</label>
         <select id="f-estado-oc" onchange="applyFilters()">
-          <option value="">Todos</option><option value="POR RECIBIR">POR RECIBIR</option><option value="RECIBIDO">RECIBIDO</option>
+          <option value="">Todos</option>
         </select>
       </div>
-      <div class="filter-group"><label>Back Order</label>
+      <div class="filter-group">
+        <label>Back Order</label>
         <select id="f-bo" onchange="applyFilters()">
           <option value="">Todos</option><option>PENDIENTE</option><option>APLICADO</option>
         </select>
       </div>
-      <div class="filter-group"><label>Comprador que Capturó OC</label>
+      <div class="filter-group">
+        <label>Comprador que Capturó OC</label>
         <select id="f-comprador" onchange="applyFilters()"><option value="">Todos</option></select>
       </div>
-      <div class="filter-group"><label>Comprador de Clave</label>
+      <div class="filter-group">
+        <label>Comprador de Clave</label>
         <select id="f-comprador-clave" onchange="applyFilters()"><option value="">Todos</option></select>
       </div>
-      <div class="filter-group"><label>Proveedor</label>
+      <div class="filter-group">
+        <label>Proveedor</label>
         <select id="f-proveedor" onchange="applyFilters()"><option value="">Todos</option></select>
       </div>
-      <div class="filter-group"><label>Fecha OC (desde)</label><input type="date" id="f-fecha-oc-desde" onchange="applyFilters()"></div>
-      <div class="filter-group"><label>Fecha OC (hasta)</label><input type="date" id="f-fecha-oc-hasta" onchange="applyFilters()"></div>
-      <div class="filter-group"><label>Fecha Entrega (desde)</label><input type="date" id="f-fecha-ent-desde" onchange="applyFilters()"></div>
-      <div class="filter-group"><label>Fecha Entrega (hasta)</label><input type="date" id="f-fecha-ent-hasta" onchange="applyFilters()"></div>
-      <div class="filter-group"><label>Folio OC</label><input type="text" id="f-folio" placeholder="Ej. 111342" oninput="applyFilters()"></div>
-      <div class="filter-group"><label>🔍 Buscar por Clave</label><input type="text" id="f-clave" placeholder="Ej. 77 o CENEFA…" oninput="applyFilters()"></div>
-      <div class="filter-group filter-actions">
+
+      <!-- Fila 2: pares de fecha (cada par ocupa 2 columnas) + folio + clave -->
+      <div class="filter-group span2">
+        <div class="date-pair">
+          <div class="date-half">
+            <label>📅 Fecha OC — Desde</label>
+            <input type="date" id="f-fecha-oc-desde" onchange="applyFilters()">
+          </div>
+          <div class="date-half">
+            <label>Hasta</label>
+            <input type="date" id="f-fecha-oc-hasta" onchange="applyFilters()">
+          </div>
+        </div>
+      </div>
+      <div class="filter-group span2">
+        <div class="date-pair">
+          <div class="date-half">
+            <label>📦 Fecha Entrega — Desde</label>
+            <input type="date" id="f-fecha-ent-desde" onchange="applyFilters()">
+          </div>
+          <div class="date-half">
+            <label>Hasta</label>
+            <input type="date" id="f-fecha-ent-hasta" onchange="applyFilters()">
+          </div>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label>Folio OC</label>
+        <input type="text" id="f-folio" placeholder="Ej. 111342" oninput="applyFilters()">
+      </div>
+      <div class="filter-group">
+        <label>🔍 Buscar por Clave</label>
+        <input type="text" id="f-clave" placeholder="Ej. 77 o CENEFA…" oninput="applyFilters()">
+      </div>
+
+      <!-- Fila 3: acciones centradas -->
+      <div class="filter-group filter-actions span2" style="justify-content:flex-start;align-items:center">
         <button class="btn btn-ghost" onclick="resetFilters()">✕ Limpiar</button>
         <button class="btn btn-green" onclick="exportToExcel()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           Exportar Excel
         </button>
       </div>
+
     </div>
   </div>
 
@@ -492,7 +581,12 @@ function processWorkbook(buf){
     fullReset();
     setStatus('Actualizado: '+hora());
     $('status-dot').classList.add('live');
-    buildDropdowns(); applyFilters(); hideLoading(); showDashboard();
+
+    buildDropdowns();
+    const eoc2=$('f-estado-oc');
+    if(eoc2){ const opts=[...eoc2.options].map(o=>o.value); eoc2.value=opts.includes('POR RECIBIR')?'POR RECIBIR':''; }
+    applyFilters();
+    hideLoading(); showDashboard();
   }catch(err){
     hideLoading();
     console.error(err);
@@ -500,9 +594,28 @@ function processWorkbook(buf){
   }
 }
 
-// ── FULL RESET — limpia filtros y datos anteriores antes de cargar nuevos ──
+// ── COLLAPSIBLE FILTERS ────────────────────────────────────────────────────
+let filtersVisible = true;
+function toggleFilters(){
+  filtersVisible = !filtersVisible;
+  $('filter-grid').classList.toggle('hidden', !filtersVisible);
+  $('filter-toggle-label').textContent = filtersVisible ? 'Ocultar' : 'Mostrar';
+  $('filter-toggle-icon').classList.toggle('closed', !filtersVisible);
+}
+
+function updateActiveCount(){
+  const ids = ['f-estatus','f-estado-oc','f-bo','f-comprador','f-comprador-clave','f-proveedor',
+               'f-fecha-oc-desde','f-fecha-oc-hasta','f-fecha-ent-desde','f-fecha-ent-hasta',
+               'f-folio','f-clave','search-box'];
+  const count = ids.filter(id=>{ const el=$(id); return el && el.value; }).length;
+  const badge = $('active-filters-count');
+  if(count > 0){ badge.textContent = count+' activo'+(count>1?'s':''); badge.style.display='inline'; }
+  else { badge.style.display='none'; }
+}
+
+// ── FULL RESET ─────────────────────────────────────────────────────────────
 function fullReset(){
-  ['f-estatus','f-estado-oc','f-bo','f-comprador','f-comprador-clave','f-proveedor']
+  ['f-estatus','f-bo','f-comprador','f-comprador-clave','f-proveedor','f-estado-oc']
     .forEach(id=>{ const el=$(id); if(el) el.value=''; });
   ['f-fecha-oc-desde','f-fecha-oc-hasta','f-fecha-ent-desde','f-fecha-ent-hasta',
    'f-folio','f-clave','search-box']
@@ -534,7 +647,19 @@ function processJson(json){
       : hora();
     setStatus('Generado: '+gen);
     $('status-dot').classList.add('live');
-    buildDropdowns(); applyFilters();
+
+    // 1) Reconstruir dropdowns PRIMERO (incluye Estado OC dinámico)
+    buildDropdowns();
+
+    // 2) Seleccionar "POR RECIBIR" por defecto si existe en los datos
+    const eoc = $('f-estado-oc');
+    if(eoc){
+      const opts = [...eoc.options].map(o=>o.value);
+      eoc.value = opts.includes('POR RECIBIR') ? 'POR RECIBIR' : '';
+    }
+
+    // 3) Aplicar filtros
+    applyFilters();
   }catch(err){
     console.error(err);
     throw err;
@@ -594,39 +719,45 @@ function updateCD(){ const m=Math.floor(countdownLeft/60),s=countdownLeft%60; $(
 
 // ── DROPDOWNS ──────────────────────────────────────────────────────────────
 function buildDropdowns(){
-  // Filtrar valores vacíos y duplicados
-  const comps = [...new Set(allOrders.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
-  const provs  = [...new Set(allOrders.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
-  const ckeys  = [...new Set(
+  // Reconstruye SIEMPRE desde allOrders completo — nunca deja opciones fantasma
+  const comps    = [...new Set(allOrders.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
+  const provs    = [...new Set(allOrders.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
+  const estados  = [...new Set(allOrders.map(o=>o._estadoOC).filter(v=>v&&v.trim()))].sort();
+  const ckeys    = [...new Set(
     Object.values(allProducts).flat()
-      .map(p=>String(p['COMPRADOR']||'').trim())
-      .filter(Boolean)
+      .map(p=>String(p['COMPRADOR']||'').trim()).filter(Boolean)
   )].sort();
-  // Siempre reconstruir completamente (evita opciones fantasma de versiones anteriores)
   fillSel('f-comprador',comps,true);
   fillSel('f-proveedor',provs,true);
   fillSel('f-comprador-clave',ckeys,true);
+  fillSel('f-estado-oc',estados,true);  // dinámico desde los datos
+  $('kpi-prov').textContent = provs.length.toLocaleString('es-MX');
 }
+
 function fillSel(id, vals, forceRebuild=false){
-  const s=$(id);
-  const cur = forceRebuild ? '' : s.value;  // on forceRebuild, reset to "Todos"
+  const s=$(id); if(!s) return;
+  const cur = forceRebuild ? '' : s.value;
   s.innerHTML='<option value="">Todos</option>'+
     vals.map(v=>`<option value="${escH(v)}"${v===cur?' selected':''}>${escH(v)}</option>`).join('');
 }
+
 function cascadeDropdowns(){
-  const comps=[...new Set(filtered.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
-  const provs=[...new Set(filtered.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
-  const fols=new Set(filtered.map(o=>o._folio));
-  const ckeys=[...new Set(
+  const src    = filtered.length > 0 ? filtered : allOrders;
+  const comps  = [...new Set(src.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
+  const provs  = [...new Set(src.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
+  const estados= [...new Set(src.map(o=>o._estadoOC).filter(v=>v&&v.trim()))].sort();
+  const fols   = new Set(src.map(o=>o._folio));
+  const ckeys  = [...new Set(
     Object.entries(allProducts)
       .filter(([f])=>fols.has(f))
       .flatMap(([,ps])=>ps.map(p=>String(p['COMPRADOR']||'').trim()))
       .filter(Boolean)
   )].sort();
-  if(!$('f-comprador').value)      fillSel('f-comprador',comps);
-  if(!$('f-proveedor').value)      fillSel('f-proveedor',provs);
-  if(!$('f-comprador-clave').value)fillSel('f-comprador-clave',ckeys);
-  $('kpi-prov').textContent=provs.length.toLocaleString('es-MX');
+  if(!$('f-comprador').value)       fillSel('f-comprador',comps);
+  if(!$('f-proveedor').value)       fillSel('f-proveedor',provs);
+  if(!$('f-comprador-clave').value) fillSel('f-comprador-clave',ckeys);
+  if(!$('f-estado-oc').value)       fillSel('f-estado-oc',estados);
+  $('kpi-prov').textContent = provs.length.toLocaleString('es-MX');
 }
 
 // ── FILTERS ────────────────────────────────────────────────────────────────
@@ -672,13 +803,25 @@ function applyFilters(){
   });
 
   sortFiltered(); currentPage=1;
-  updateKPIs(); renderTable(); cascadeDropdowns();
+  updateKPIs(); renderTable(); updateActiveCount();
+
+  // Cascade siempre (la función ya tiene fallback a allOrders si filtered está vacío)
+  const anyFilter = estatus||estadoOC||bo||comprador||compClave||proveedor||
+                    fDesde||fHasta||eDesde||eHasta||folio||clave||search;
+  if(anyFilter) cascadeDropdowns();
 }
 
 function resetFilters(){
-  ['f-estatus','f-estado-oc','f-bo','f-comprador','f-comprador-clave','f-proveedor'].forEach(id=>$(id).value='');
-  ['f-fecha-oc-desde','f-fecha-oc-hasta','f-fecha-ent-desde','f-fecha-ent-hasta','f-folio','f-clave','search-box'].forEach(id=>$(id).value='');
-  buildDropdowns(); applyFilters();
+  ['f-estatus','f-bo','f-comprador','f-comprador-clave','f-proveedor','f-estado-oc']
+    .forEach(id=>{ const el=$(id); if(el) el.value=''; });
+  ['f-fecha-oc-desde','f-fecha-oc-hasta','f-fecha-ent-desde','f-fecha-ent-hasta',
+   'f-folio','f-clave','search-box']
+    .forEach(id=>{ const el=$(id); if(el) el.value=''; });
+  // Reconstruir desde allOrders y luego aplicar default POR RECIBIR si existe
+  buildDropdowns();
+  const eoc=$('f-estado-oc');
+  if(eoc){ const opts=[...eoc.options].map(o=>o.value); eoc.value=opts.includes('POR RECIBIR')?'POR RECIBIR':''; }
+  applyFilters();
 }
 
 // ── KPIs ───────────────────────────────────────────────────────────────────
@@ -752,10 +895,10 @@ function renderTable(){
       <td><button class="expand-btn" id="btn-${rid}" onclick="event.stopPropagation();toggleDetail('${rid}','${escJ(folio)}')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
       </button></td>
-      <td><span class="mono">${escH(folio)}</span></td>
+      <td><span class="folio-cell">${escH(folio)}</span></td>
       <td>${fmtDate(o._fechaOC)}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escH(o._prov)}">${escH(o._prov)}</td>
-      <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escH(o._comp)}">${escH(o._comp||'—')}</td>
+      <td style="max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escH(o._prov)}"><span class="prov-cell">${escH(o._prov)}</span></td>
+      <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--gray-600)" title="${escH(o._comp)}">${escH(o._comp||'—')}</td>
       <td><span class="badge ${estadoCls(o._estadoOC)}">${escH(o._estadoOC||'—')}</span></td>
       <td><span class="badge ${badgeCls(o._estatus)}">${escH(o._estatus||'—')}</span></td>
       <td><span class="badge ${badgeCls(o._bo)}">${escH(o._bo||'—')}</span></td>
