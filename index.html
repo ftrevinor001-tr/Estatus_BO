@@ -415,32 +415,81 @@ function normalizeOrders(estadoMap){
 }
 
 // ── PROCESS XLSX WORKBOOK ─────────────────────────────────────────────────
+function sheetByName(wb, keywords, mustHaveCols){
+  // Find a sheet whose name matches keywords AND has required columns
+  for(const name of wb.SheetNames){
+    const match = keywords.some(k => name.toLowerCase().includes(k.toLowerCase()));
+    if(!match) continue;
+    if(!mustHaveCols) return name;
+    const ws   = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:'', header:1});
+    const header = (rows[0]||[]).map(c=>String(c).trim());
+    if(mustHaveCols.every(c=>header.includes(c))) return name;
+  }
+  return null;
+}
+
+function cleanDateStr(val){
+  if(!val) return '';
+  const s = String(val).trim();
+  // Strip timestamp: "2026-01-02 09:17:57.620000" → "2026-01-02"
+  return s.split(/[\sT]/)[0].substring(0,10);
+}
+
 function processWorkbook(buf){
   try{
     showLoading('Procesando Excel…');
-    const wb = XLSX.read(buf,{type:'array',cellDates:true});
+    const wb = XLSX.read(buf,{type:'array',cellDates:false});
     console.log('Hojas:', wb.SheetNames);
 
-    // Hoja índice 1 = " Ordenes de Compra" → ÓRDENES
-    allOrders = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[1]],{defval:''});
+    // ── Encontrar hojas por nombre/contenido ──────────────────────────────
+    // Órdenes: tiene columnas Folio, Estatus, Back Order
+    const nameOC   = sheetByName(wb, ['ordenes de compra','ordenes compra'],['Folio','Estatus']);
+    // Productos: tiene FOLIO OC y CLAVE
+    const nameProd = sheetByName(wb, ['productos incluidos'],['FOLIO OC','CLAVE']);
+    // Estado OC: tiene Estado OC y Folio
+    const nameEst  = sheetByName(wb, ['rp01-23','rp01_23'],['Estado OC','Folio']) ||
+                     sheetByName(wb, ['ordenes'],['Estado OC','Folio']);
 
-    // Hoja índice 0 = "Productos Incluidos en" → PRODUCTOS
-    allProducts = {};
-    XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}).forEach(p=>{
-      const k = String(p['FOLIO OC']||'').trim();
-      if(k){ if(!allProducts[k]) allProducts[k]=[]; allProducts[k].push(p); }
-    });
+    if(!nameOC)   throw new Error('No se encontró la hoja de Órdenes de Compra en el Excel.');
+    if(!nameProd) throw new Error('No se encontró la hoja de Productos en el Excel.');
+    console.log('Órdenes:', nameOC, '| Productos:', nameProd, '| Estado OC:', nameEst);
 
-    // Hoja índice 3 = "RP01-23 Ordenes de Compra" → Estado OC
+    // ── Estado OC map ─────────────────────────────────────────────────────
     const estadoMap = {};
-    if(wb.SheetNames[3]){
-      XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[3]],{defval:''}).forEach(r=>{
+    if(nameEst){
+      XLSX.utils.sheet_to_json(wb.Sheets[nameEst],{defval:''}).forEach(r=>{
         const f=String(r['Folio']||'').trim();
-        if(f) estadoMap[f]=String(r['Estado OC']||'').trim().toUpperCase();
+        const e=String(r['Estado OC']||'').trim().toUpperCase();
+        if(f&&e) estadoMap[f]=e;
       });
     }
 
+    // ── Órdenes ───────────────────────────────────────────────────────────
+    allOrders = XLSX.utils.sheet_to_json(wb.Sheets[nameOC],{defval:''})
+      .filter(o => String(o['Folio']||'').trim() !== '');
+
+    // Clean timestamps in date fields
+    allOrders.forEach(o=>{
+      o['Fecha']          = cleanDateStr(o['Fecha']);
+      o['Fecha Entrega']  = cleanDateStr(o['Fecha Entrega']);
+      if(o['Estatus']) o['Estatus'] = String(o['Estatus']).trim().toUpperCase();
+      if(o['Back Order']) o['Back Order'] = String(o['Back Order']).trim().toUpperCase();
+    });
+
+    // ── Productos ─────────────────────────────────────────────────────────
+    allProducts = {};
+    XLSX.utils.sheet_to_json(wb.Sheets[nameProd],{defval:''}).forEach(p=>{
+      const k=String(p['FOLIO OC']||'').trim();
+      if(!k) return;
+      if(!allProducts[k]) allProducts[k]=[];
+      p['FECHA ENTREGA'] = cleanDateStr(p['FECHA ENTREGA']);
+      p['FECHA OC']      = cleanDateStr(p['FECHA OC']);
+      allProducts[k].push(p);
+    });
+
     normalizeOrders(estadoMap);
+    fullReset();
     setStatus('Actualizado: '+hora());
     $('status-dot').classList.add('live');
     buildDropdowns(); applyFilters(); hideLoading(); showDashboard();
@@ -451,16 +500,34 @@ function processWorkbook(buf){
   }
 }
 
+// ── FULL RESET — limpia filtros y datos anteriores antes de cargar nuevos ──
+function fullReset(){
+  ['f-estatus','f-estado-oc','f-bo','f-comprador','f-comprador-clave','f-proveedor']
+    .forEach(id=>{ const el=$(id); if(el) el.value=''; });
+  ['f-fecha-oc-desde','f-fecha-oc-hasta','f-fecha-ent-desde','f-fecha-ent-hasta',
+   'f-folio','f-clave','search-box']
+    .forEach(id=>{ const el=$(id); if(el) el.value=''; });
+}
+
 // ── PROCESS JSON (from data.json) ──────────────────────────────────────────
 function processJson(json){
   try{
-    // Validate structure
-    if(!json.orders || !Array.isArray(json.orders))
+    if(!json.orders||!Array.isArray(json.orders))
       throw new Error('data.json no tiene la estructura correcta. Vuelve a ejecutar GitHub Actions.');
 
     allOrders   = json.orders;
     allProducts = json.products || {};
+
+    // Limpiar timestamps de fechas por si acaso
+    allOrders.forEach(o=>{
+      if(o['Fecha'])        o['Fecha']        = String(o['Fecha']).split(/[\sT]/)[0].substring(0,10);
+      if(o['Fecha Entrega'])o['Fecha Entrega']= String(o['Fecha Entrega']).split(/[\sT]/)[0].substring(0,10);
+      if(o['Estatus'])      o['Estatus']      = String(o['Estatus']).trim().toUpperCase();
+      if(o['Back Order'])   o['Back Order']   = String(o['Back Order']).trim().toUpperCase();
+    });
+
     normalizeOrders(null);
+    fullReset();
 
     const gen = json.generated
       ? new Date(json.generated).toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
@@ -527,23 +594,38 @@ function updateCD(){ const m=Math.floor(countdownLeft/60),s=countdownLeft%60; $(
 
 // ── DROPDOWNS ──────────────────────────────────────────────────────────────
 function buildDropdowns(){
-  const comps = [...new Set(allOrders.map(o=>o._comp).filter(Boolean))].sort();
-  const provs = [...new Set(allOrders.map(o=>o._prov).filter(Boolean))].sort();
-  const ckeys = [...new Set(Object.values(allProducts).flat().map(p=>String(p['COMPRADOR']||'').trim()).filter(Boolean))].sort();
-  fillSel('f-comprador',comps); fillSel('f-proveedor',provs); fillSel('f-comprador-clave',ckeys);
+  // Filtrar valores vacíos y duplicados
+  const comps = [...new Set(allOrders.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
+  const provs  = [...new Set(allOrders.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
+  const ckeys  = [...new Set(
+    Object.values(allProducts).flat()
+      .map(p=>String(p['COMPRADOR']||'').trim())
+      .filter(Boolean)
+  )].sort();
+  // Siempre reconstruir completamente (evita opciones fantasma de versiones anteriores)
+  fillSel('f-comprador',comps,true);
+  fillSel('f-proveedor',provs,true);
+  fillSel('f-comprador-clave',ckeys,true);
 }
-function fillSel(id,vals){
-  const s=$(id), cur=s.value;
-  s.innerHTML='<option value="">Todos</option>'+vals.map(v=>`<option value="${escH(v)}"${v===cur?' selected':''}>${escH(v)}</option>`).join('');
+function fillSel(id, vals, forceRebuild=false){
+  const s=$(id);
+  const cur = forceRebuild ? '' : s.value;  // on forceRebuild, reset to "Todos"
+  s.innerHTML='<option value="">Todos</option>'+
+    vals.map(v=>`<option value="${escH(v)}"${v===cur?' selected':''}>${escH(v)}</option>`).join('');
 }
 function cascadeDropdowns(){
-  const comps=[...new Set(filtered.map(o=>o._comp).filter(Boolean))].sort();
-  const provs=[...new Set(filtered.map(o=>o._prov).filter(Boolean))].sort();
+  const comps=[...new Set(filtered.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
+  const provs=[...new Set(filtered.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
   const fols=new Set(filtered.map(o=>o._folio));
-  const ckeys=[...new Set(Object.entries(allProducts).filter(([f])=>fols.has(f)).flatMap(([,ps])=>ps.map(p=>String(p['COMPRADOR']||'').trim())).filter(Boolean))].sort();
-  if(!$('f-comprador').value) fillSel('f-comprador',comps);
-  if(!$('f-proveedor').value) fillSel('f-proveedor',provs);
-  if(!$('f-comprador-clave').value) fillSel('f-comprador-clave',ckeys);
+  const ckeys=[...new Set(
+    Object.entries(allProducts)
+      .filter(([f])=>fols.has(f))
+      .flatMap(([,ps])=>ps.map(p=>String(p['COMPRADOR']||'').trim()))
+      .filter(Boolean)
+  )].sort();
+  if(!$('f-comprador').value)      fillSel('f-comprador',comps);
+  if(!$('f-proveedor').value)      fillSel('f-proveedor',provs);
+  if(!$('f-comprador-clave').value)fillSel('f-comprador-clave',ckeys);
   $('kpi-prov').textContent=provs.length.toLocaleString('es-MX');
 }
 
