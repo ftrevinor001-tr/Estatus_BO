@@ -120,6 +120,16 @@ def safe_num(val):
         return 0
 
 
+def normaliza_folio(f):
+    """Normaliza un folio para comparar entre hojas: quita espacios, ceros a la
+    izquierda y el sufijo '.0' que a veces deja Excel en columnas numéricas."""
+    s = str(f).strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    s = s.lstrip('0')
+    return s or '0'
+
+
 def clean_date(val):
     """Convierte cualquier formato de fecha a YYYY-MM-DD."""
     if not val or val == '':
@@ -183,11 +193,17 @@ def main():
             f = safe_str(r.get('Folio', ''))
             e = safe_str(r.get('Estado OC', '')).upper()
             if f and e:
-                estado_map[f] = e
+                estado_map[normaliza_folio(f)] = e
+        matched = 0
         for o in orders:
-            if o['Folio'] in estado_map:
-                o['Estado OC'] = estado_map[o['Folio']]
-        print(f"   ✅ Estado OC mapeados: {len(estado_map)}")
+            key = normaliza_folio(o['Folio'])
+            if key in estado_map:
+                o['Estado OC'] = estado_map[key]
+                matched += 1
+        print(f"   ✅ Estado OC mapeados: {matched} de {len(estado_map)} en la hoja")
+        if matched == 0 and len(estado_map) > 0:
+            print(f"   ⚠ ADVERTENCIA: ningún folio coincidió. Muestra hoja Estado OC: {list(estado_map.keys())[:5]}")
+            print(f"   ⚠ Muestra folios Órdenes: {[o['Folio'] for o in orders[:5]]}")
 
     # ── Productos ─────────────────────────────────────────────────────────
     df_prod = pd.read_excel(EXCEL_PATH, sheet_name=hoja_prod, dtype=str, engine='openpyxl').fillna('')

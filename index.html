@@ -175,6 +175,7 @@ td{padding:13px 14px;font-size:13.5px;vertical-align:middle}
 .badge.otro{background:var(--gray-100);color:var(--gray-700);border-color:var(--gray-200)}.badge.otro::before{background:var(--gray-500)}
 /* Estado Recepción - visually distinct */
 .badge.por-recibir{background:#FFF3CD;color:#664D03;border-color:#FFDA6A;font-size:12px}.badge.por-recibir::before{background:#FFC107}
+.badge.parcial{background:#FFE8D1;color:#7C3A0E;border-color:#FFC089;font-size:12px}.badge.parcial::before{background:#FB923C}
 .badge.recibido{background:#D1E7DD;color:#0A3622;border-color:#A3CFBB;font-size:12px}.badge.recibido::before{background:#198754}
 .mono{font-family:'DM Mono',monospace;font-size:12px}
 tr.detail-row{display:none}
@@ -450,12 +451,18 @@ function hora(){ return new Date().toLocaleTimeString('es-MX',{hour:'2-digit',mi
 function parseDate(v){
   if(!v) return null;
   if(v instanceof Date) return v;
-  const d = new Date(v); return isNaN(d)?null:d;
+  const s = String(v).trim();
+  // Fechas tipo "YYYY-MM-DD" (con o sin timestamp después): construir en hora LOCAL
+  // para evitar el corrimiento de un día que causa new Date('YYYY-MM-DD') al
+  // interpretarlo como medianoche UTC y mostrarlo un día antes en horario de México.
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+  const d = new Date(s); return isNaN(d)?null:d;
 }
 function fmtDate(d){
   if(!d) return '—';
-  if(!(d instanceof Date)) d=new Date(d);
-  return isNaN(d)?'—':d.toLocaleDateString('es-MX',{year:'numeric',month:'2-digit',day:'2-digit'});
+  if(!(d instanceof Date)) d=parseDate(d);
+  return (!d||isNaN(d))?'—':d.toLocaleDateString('es-MX',{year:'numeric',month:'2-digit',day:'2-digit'});
 }
 function fmtMoney(v){
   const n=parseFloat(v); if(isNaN(n)) return '—';
@@ -472,11 +479,34 @@ function badgeCls(s){
   if(s.includes('CANCEL')) return 'cancelado';
   return 'otro';
 }
+// Determina si un estado de recepción representa "aún falta recibir algo",
+// sin depender de la redacción exacta (compatible con POR RECIBIR/RECIBIDO
+// y también con PENDIENTE RECIBIR/RECIBIDO PARCIALMENTE/RECIBIDO TOTALMENTE).
+function esPendienteRecepcion(s){
+  s=(s||'').toUpperCase().trim();
+  if(!s) return false;
+  if(s.includes('TOTALMENTE')) return false;   // recibido al 100%
+  if(s==='RECIBIDO') return false;             // recibido (terminología antigua)
+  return true;                                  // pendiente, parcial, por recibir, etc.
+}
 function estadoCls(s){
-  if(!s) return 'otro'; s=s.toUpperCase();
-  if(s==='POR RECIBIR') return 'por-recibir';
-  if(s==='RECIBIDO') return 'recibido';
+  s=(s||'').toUpperCase().trim();
+  if(!s) return 'otro';
+  if(s.includes('PARCIAL')) return 'parcial';
+  if(s.includes('TOTALMENTE')||s==='RECIBIDO') return 'recibido';
+  if(s.includes('PENDIENTE')||s==='POR RECIBIR') return 'por-recibir';
   return 'otro';
+}
+// Selecciona la opción de "pendiente de recepción" más adecuada entre las
+// disponibles en el select, sin depender del texto exacto del Excel.
+function selectDefaultEstadoOC(selectEl){
+  if(!selectEl) return;
+  const opts = [...selectEl.options].map(o=>o.value).filter(Boolean);
+  // Preferencia: texto exacto conocido > cualquier opción que sea "pendiente" según esPendienteRecepcion
+  let pick = opts.find(v=>v==='POR RECIBIR' || v==='PENDIENTE RECIBIR')
+          || opts.find(v=>esPendienteRecepcion(v))
+          || '';
+  selectEl.value = pick;
 }
 function badgeCompra(s){
   s=(s||'').toUpperCase();
@@ -584,7 +614,7 @@ function processWorkbook(buf){
 
     buildDropdowns();
     const eoc2=$('f-estado-oc');
-    if(eoc2){ const opts=[...eoc2.options].map(o=>o.value); eoc2.value=opts.includes('POR RECIBIR')?'POR RECIBIR':''; }
+    if(eoc2){ selectDefaultEstadoOC(eoc2); }
     applyFilters();
     hideLoading(); showDashboard();
   }catch(err){
@@ -651,12 +681,8 @@ function processJson(json){
     // 1) Reconstruir dropdowns PRIMERO (incluye Estado OC dinámico)
     buildDropdowns();
 
-    // 2) Seleccionar "POR RECIBIR" por defecto si existe en los datos
-    const eoc = $('f-estado-oc');
-    if(eoc){
-      const opts = [...eoc.options].map(o=>o.value);
-      eoc.value = opts.includes('POR RECIBIR') ? 'POR RECIBIR' : '';
-    }
+    // 2) Seleccionar la opción "pendiente de recepción" por defecto (texto flexible)
+    selectDefaultEstadoOC($('f-estado-oc'));
 
     // 3) Aplicar filtros
     applyFilters();
@@ -718,117 +744,151 @@ function stopCountdown(){ if(countdownTimer){clearInterval(countdownTimer);count
 function updateCD(){ const m=Math.floor(countdownLeft/60),s=countdownLeft%60; $('countdown-text').textContent=m>0?`${m}m ${String(s).padStart(2,'0')}s`:`${s}s`; }
 
 // ── DROPDOWNS ──────────────────────────────────────────────────────────────
+
+// Construye desde allOrders completo — sólo en carga inicial / reset total
 function buildDropdowns(){
-  // Reconstruye SIEMPRE desde allOrders completo — nunca deja opciones fantasma
-  const comps    = [...new Set(allOrders.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
-  const provs    = [...new Set(allOrders.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
-  const estados  = [...new Set(allOrders.map(o=>o._estadoOC).filter(v=>v&&v.trim()))].sort();
-  const ckeys    = [...new Set(
-    Object.values(allProducts).flat()
-      .map(p=>String(p['COMPRADOR']||'').trim()).filter(Boolean)
-  )].sort();
-  fillSel('f-comprador',comps,true);
-  fillSel('f-proveedor',provs,true);
-  fillSel('f-comprador-clave',ckeys,true);
-  fillSel('f-estado-oc',estados,true);  // dinámico desde los datos
+  const comps   = uniq(allOrders.map(o=>o._comp));
+  const provs   = uniq(allOrders.map(o=>o._prov));
+  const estados = uniq(allOrders.map(o=>o._estadoOC));
+  const ckeys   = uniq(Object.values(allProducts).flat().map(p=>String(p['COMPRADOR']||'').trim()));
+  setSel('f-comprador',       comps,   '');
+  setSel('f-proveedor',       provs,   '');
+  setSel('f-estado-oc',       estados, '');
+  setSel('f-comprador-clave', ckeys,   '');
   $('kpi-prov').textContent = provs.length.toLocaleString('es-MX');
 }
 
-function fillSel(id, vals, forceRebuild=false){
+// Reemplaza opciones de un select manteniendo el valor si sigue siendo válido
+function setSel(id, opts, forceVal){
   const s=$(id); if(!s) return;
-  const cur = forceRebuild ? '' : s.value;
-  s.innerHTML='<option value="">Todos</option>'+
-    vals.map(v=>`<option value="${escH(v)}"${v===cur?' selected':''}>${escH(v)}</option>`).join('');
+  const cur = forceVal !== undefined ? forceVal : s.value;
+  const keep = opts.includes(cur) ? cur : '';
+  s.innerHTML = '<option value="">Todos</option>' +
+    opts.map(v=>`<option value="${escH(v)}"${v===keep?' selected':''}>${escH(v)}</option>`).join('');
+  return keep; // valor que quedó seleccionado
 }
 
-function cascadeDropdowns(){
-  const src    = filtered.length > 0 ? filtered : allOrders;
-  const comps  = [...new Set(src.map(o=>o._comp).filter(v=>v&&v.trim()))].sort();
-  const provs  = [...new Set(src.map(o=>o._prov).filter(v=>v&&v.trim()))].sort();
-  const estados= [...new Set(src.map(o=>o._estadoOC).filter(v=>v&&v.trim()))].sort();
-  const fols   = new Set(src.map(o=>o._folio));
-  const ckeys  = [...new Set(
-    Object.entries(allProducts)
-      .filter(([f])=>fols.has(f))
-      .flatMap(([,ps])=>ps.map(p=>String(p['COMPRADOR']||'').trim()))
-      .filter(Boolean)
-  )].sort();
-  if(!$('f-comprador').value)       fillSel('f-comprador',comps);
-  if(!$('f-proveedor').value)       fillSel('f-proveedor',provs);
-  if(!$('f-comprador-clave').value) fillSel('f-comprador-clave',ckeys);
-  if(!$('f-estado-oc').value)       fillSel('f-estado-oc',estados);
-  $('kpi-prov').textContent = provs.length.toLocaleString('es-MX');
+// Auxiliar: valores únicos no vacíos ordenados
+function uniq(arr){
+  return [...new Set(arr.map(v=>String(v||'').trim()).filter(Boolean))].sort();
 }
 
-// ── FILTERS ────────────────────────────────────────────────────────────────
+// ── FILTRADO CENTRAL ───────────────────────────────────────────────────────
+// matchesFilters aplica todos los filtros excepto el indicado en 'skip'
+function matchesFilters(o, v, skip){
+  if(skip!=='estatus'  && v.estatus  && o._estatus  !== v.estatus)  return false;
+  if(skip!=='estadoOC' && v.estadoOC && o._estadoOC !== v.estadoOC) return false;
+  if(skip!=='bo'       && v.bo       && o._bo       !== v.bo)       return false;
+  if(skip!=='comp'     && v.comp     && o._comp     !== v.comp)     return false;
+  if(skip!=='prov'     && v.prov     && o._prov     !== v.prov)     return false;
+  if(v.folio  && !o._folio.toLowerCase().includes(v.folio))         return false;
+  if(v.fDesde && o._fechaOC  && o._fechaOC  < parseDate(v.fDesde))                         return false;
+  if(v.fHasta && o._fechaOC  && o._fechaOC  > new Date(parseDate(v.fHasta).getTime()+86399000)) return false;
+  if(v.eDesde && o._fechaEnt && o._fechaEnt < parseDate(v.eDesde))                          return false;
+  if(v.eHasta && o._fechaEnt && o._fechaEnt > new Date(parseDate(v.eHasta).getTime()+86399000)) return false;
+  if(v.search){
+    if(!(o._prov+' '+(o['Observaciones']||'')+' '+o._comp).toLowerCase().includes(v.search)) return false;
+  }
+  if(skip!=='cc' && v.cc){
+    const ps=allProducts[o._folio]||[];
+    if(!ps.some(p=>String(p['COMPRADOR']||'').trim()===v.cc)) return false;
+  }
+  if(v.clave){
+    const ps=allProducts[o._folio]||[];
+    if(!ps.some(p=>String(p['CLAVE']||'').toLowerCase().includes(v.clave)||
+                   String(p['DESCRIPCION']||'').toLowerCase().includes(v.clave))) return false;
+  }
+  return true;
+}
+
+// Lee todos los valores de filtro actuales del DOM
+function readVals(){
+  return {
+    estatus:  $('f-estatus').value,
+    estadoOC: $('f-estado-oc').value,
+    bo:       $('f-bo').value,
+    comp:     $('f-comprador').value,
+    prov:     $('f-proveedor').value,
+    cc:       $('f-comprador-clave').value,
+    fDesde:   $('f-fecha-oc-desde').value,
+    fHasta:   $('f-fecha-oc-hasta').value,
+    eDesde:   $('f-fecha-ent-desde').value,
+    eHasta:   $('f-fecha-ent-hasta').value,
+    folio:    $('f-folio').value.trim().toLowerCase(),
+    clave:    $('f-clave').value.trim().toLowerCase(),
+    search:   $('search-box').value.trim().toLowerCase(),
+  };
+}
+
+// ── APPLY FILTERS + CASCADE BIDIRECCIONAL ──────────────────────────────────
+let _cascading = false; // evita recursión infinita
+
 function applyFilters(){
-  const estatus   = $('f-estatus').value;
-  const estadoOC  = $('f-estado-oc').value;
-  const bo        = $('f-bo').value;
-  const comprador = $('f-comprador').value;
-  const compClave = $('f-comprador-clave').value;
-  const proveedor = $('f-proveedor').value;
-  const fDesde    = $('f-fecha-oc-desde').value;
-  const fHasta    = $('f-fecha-oc-hasta').value;
-  const eDesde    = $('f-fecha-ent-desde').value;
-  const eHasta    = $('f-fecha-ent-hasta').value;
-  const folio     = $('f-folio').value.trim().toLowerCase();
-  const clave     = $('f-clave').value.trim().toLowerCase();
-  const search    = $('search-box').value.trim().toLowerCase();
+  const v = readVals();
 
-  filtered = allOrders.filter(o=>{
-    if(estatus  && o._estatus  !== estatus)  return false;
-    if(estadoOC && o._estadoOC !== estadoOC) return false;
-    if(bo       && o._bo       !== bo)       return false;
-    if(comprador&& o._comp     !== comprador)return false;
-    if(proveedor&& o._prov     !== proveedor)return false;
-    if(folio    && !o._folio.toLowerCase().includes(folio)) return false;
-    if(fDesde   && o._fechaOC  && o._fechaOC < new Date(fDesde))              return false;
-    if(fHasta   && o._fechaOC  && o._fechaOC > new Date(fHasta+'T23:59:59'))  return false;
-    if(eDesde   && o._fechaEnt && o._fechaEnt < new Date(eDesde))             return false;
-    if(eHasta   && o._fechaEnt && o._fechaEnt > new Date(eHasta+'T23:59:59')) return false;
-    if(search){
-      const hay=(o._prov+' '+(o['Observaciones']||'')+' '+o._comp).toLowerCase();
-      if(!hay.includes(search)) return false;
-    }
-    if(compClave){
-      const ps=allProducts[o._folio]||[];
-      if(!ps.some(p=>String(p['COMPRADOR']||'').trim()===compClave)) return false;
-    }
-    if(clave){
-      const ps=allProducts[o._folio]||[];
-      if(!ps.some(p=>String(p['CLAVE']||'').toLowerCase().includes(clave)||String(p['DESCRIPCION']||'').toLowerCase().includes(clave))) return false;
-    }
-    return true;
-  });
-
+  // Filtrar datos
+  filtered = allOrders.filter(o => matchesFilters(o, v, null));
   sortFiltered(); currentPage=1;
   updateKPIs(); renderTable(); updateActiveCount();
 
-  // Cascade siempre (la función ya tiene fallback a allOrders si filtered está vacío)
-  const anyFilter = estatus||estadoOC||bo||comprador||compClave||proveedor||
-                    fDesde||fHasta||eDesde||eHasta||folio||clave||search;
-  if(anyFilter) cascadeDropdowns();
+  // Cascade bidireccional: opciones de cada dropdown = lo que es válido dado el resto de filtros
+  if(!_cascading){
+    _cascading = true;
+
+    // Para cada dropdown cascade, filtrar allOrders ignorando ese propio dropdown
+    const comps   = uniq(allOrders.filter(o=>matchesFilters(o,v,'comp')).map(o=>o._comp));
+    const provs   = uniq(allOrders.filter(o=>matchesFilters(o,v,'prov')).map(o=>o._prov));
+    const estados = uniq(allOrders.filter(o=>matchesFilters(o,v,'estadoOC')).map(o=>o._estadoOC));
+    const ccFols  = new Set(allOrders.filter(o=>matchesFilters(o,v,'cc')).map(o=>o._folio));
+    const ckeys   = uniq(
+      Object.entries(allProducts)
+        .filter(([f])=>ccFols.has(f))
+        .flatMap(([,ps])=>ps.map(p=>String(p['COMPRADOR']||'').trim()))
+    );
+
+    // Actualizar cada dropdown — si el valor seleccionado ya no es válido, se limpia
+    const prevComp = v.comp,  prevProv = v.prov,
+          prevEst  = v.estadoOC, prevCC = v.cc;
+
+    const keptComp = setSel('f-comprador',       comps,   undefined);
+    const keptProv = setSel('f-proveedor',       provs,   undefined);
+    const keptEst  = setSel('f-estado-oc',       estados, undefined);
+    const keptCC   = setSel('f-comprador-clave', ckeys,   undefined);
+
+    $('kpi-prov').textContent = provs.length.toLocaleString('es-MX');
+
+    // Si algún valor fue limpiado automáticamente → refiltrar con los nuevos valores
+    const someCleared = (prevComp && !keptComp) || (prevProv && !keptProv) ||
+                        (prevEst  && !keptEst)  || (prevCC   && !keptCC);
+    if(someCleared){
+      const v2 = readVals();
+      filtered = allOrders.filter(o => matchesFilters(o, v2, null));
+      sortFiltered(); currentPage=1;
+      updateKPIs(); renderTable(); updateActiveCount();
+    }
+
+    _cascading = false;
+  }
 }
 
 function resetFilters(){
-  ['f-estatus','f-bo','f-comprador','f-comprador-clave','f-proveedor','f-estado-oc']
-    .forEach(id=>{ const el=$(id); if(el) el.value=''; });
-  ['f-fecha-oc-desde','f-fecha-oc-hasta','f-fecha-ent-desde','f-fecha-ent-hasta',
-   'f-folio','f-clave','search-box']
-    .forEach(id=>{ const el=$(id); if(el) el.value=''; });
-  // Reconstruir desde allOrders y luego aplicar default POR RECIBIR si existe
+  ['f-estatus','f-bo','f-comprador','f-comprador-clave','f-proveedor','f-estado-oc',
+   'f-fecha-oc-desde','f-fecha-oc-hasta','f-fecha-ent-desde','f-fecha-ent-hasta',
+   'f-folio','f-clave','search-box'].forEach(id=>{ const el=$(id); if(el) el.value=''; });
+  // Reconstruir opciones completas desde allOrders
   buildDropdowns();
+  // Aplicar default POR RECIBIR si existe en los datos
   const eoc=$('f-estado-oc');
-  if(eoc){ const opts=[...eoc.options].map(o=>o.value); eoc.value=opts.includes('POR RECIBIR')?'POR RECIBIR':''; }
+  if(eoc){ selectDefaultEstadoOC(eoc); }
   applyFilters();
 }
+
 
 // ── KPIs ───────────────────────────────────────────────────────────────────
 function updateKPIs(){
   const pend  = filtered.filter(o=>o._estatus==='PENDIENTE').length;
   const aplic = filtered.filter(o=>o._estatus==='APLICADO').length;
-  const prRec = filtered.filter(o=>o._estadoOC==='POR RECIBIR').length;
+  const prRec = filtered.filter(o=>esPendienteRecepcion(o._estadoOC)).length;
   const monto = filtered.reduce((s,o)=>s+(parseFloat(o['Importe'])||0),0);
   $('kpi-total').textContent = filtered.length.toLocaleString('es-MX');
   $('kpi-pend').textContent  = pend.toLocaleString('es-MX');
